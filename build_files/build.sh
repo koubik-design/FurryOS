@@ -7,21 +7,43 @@ cp -avf "/ctx/system_files"/. /
 
 ### Install packages
 
-# Packages can be installed from any enabled yum repo on the image.
-# RPMfusion repos are available by default in ublue main images
-# List of rpmfusion packages can be found here:
-# https://mirrors.rpmfusion.org/mirrorlist?path=free/fedora/updates/43/x86_64/repoview/index.html&protocol=https&redirect=1
+# 1. Base Utilities
+dnf5 install -y tmux neovim htop
 
-# this installs a package from fedora repos
-dnf5 install -y tmux
+# 2. Enable RPM Fusion repos (free + nonfree)
+dnf5 install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+                https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm || true
 
-# Use a COPR Example:
-#
-# dnf5 -y copr enable ublue-os/staging
-# dnf5 -y install package
-# Disable COPRs so they don't end up enabled on the final image:
-# dnf5 -y copr disable ublue-os/staging
+# 3. Core Gaming & Performance Tools
+# Removed 'gamemode-daemon', 'pipewire-pulseaudio-free', and missing steam elements.
+# Added --skip-unavailable safely across the whole block.
+dnf5 install -y --skip-unavailable \
+    steam \
+    steam-devices \
+    proton-ge-latest-bin \
+    mangohud \
+    gamemode \
+    protontricks \
+    winetricks \
+    kernel-tools \
+    sysstat \
+    vulkan-tools \
+    glxinfo \
+    mesa-demos
 
-#### Example for enabling a System Unit File
+# 4. Optional Emulators (via DNF if available, safely skipped if missing)
+dnf5 install -y --skip-unavailable retroarch dolphin-emu || true
 
+#### System Unit Enablement
+
+# Enable container socket
 systemctl enable podman.socket
+
+# Enable GameMode daemon for performance optimization
+# systemctl enable gamemoded.service
+
+# Enable container socket
+systemctl enable podman.socket
+
+# Cleanup
+rpm-ostree cleanup -m

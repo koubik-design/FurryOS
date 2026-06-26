@@ -1,3 +1,4 @@
+set shell := ["powershell", "-Command"]
 set dotenv-filename := "image-template.env"
 set dotenv-load
 
