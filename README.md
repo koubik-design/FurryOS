@@ -107,6 +107,7 @@ FurryOS/
 ├── image-template.env             # Environment variables for the image builder
 ├── IMPLEMENTATION_C...            # Project planning and implementation notes
 └── Justfile                       # Command automation recipes (the `just` command)
+```
 
 # 🔍 Deep Dive: Configuration Files
 
