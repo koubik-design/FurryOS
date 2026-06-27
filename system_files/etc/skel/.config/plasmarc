@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [General]
 immutability=none
 
@@ -42,3 +43,49 @@ SlideshowMode=0
 
 [General]
 containmentType=
+=======
+[General]
+immutability=none
+
+[Containments][1]
+AssignedActivities=
+geometry=0,0,0,0
+ItemsGeometry=
+activityId=
+formfactor=2
+lastScreen=0
+location=4
+plugin=org.kde.panel
+screen=0
+showOnlyOnActivity=false
+zvalue=0
+
+[Containments][1][Applets][2]
+immutability=none
+
+[Containments][1][Applets][3]
+immutability=none
+
+[Containments][1][General]
+AppletOrder=2;3
+
+[Containments][2]
+AssignedActivities=
+ItemsGeometry=
+activityId=
+formfactor=0
+immutability=none
+lastScreen=0
+location=0
+plugin=org.kde.plasma.desktopcontainment
+screen=0
+showOnlyOnActivity=false
+
+[Containments][2][Wallpapers][org.kde.image][General]
+Image=file:///usr/share/backgrounds/furryos/default.png
+SlideshowFolderUrl=
+SlideshowMode=0
+
+[General]
+containmentType=
+>>>>>>> 3e49ce90d7baa31d43ae479e6a61a64b2b31d537
