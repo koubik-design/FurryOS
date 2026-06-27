@@ -1,6 +1,6 @@
 set shell := ["powershell", "-Command"]
 set dotenv-filename := "image-template.env"
-set dotenv-load
+set dotenv-load := true
 
 export image_name := env_var("IMAGE_NAME")
 export repo_organization := env_var("REPO_ORGANIZATION")
@@ -294,8 +294,23 @@ _build-bib $target_image $tag $type $config: (_rootful_load_image target_image t
     #!/usr/bin/env bash
     set -euo pipefail
 
+    # ---> NEW NETWORK-FREE PATCH: Extract, modify, and inject the repo configs
+    echo "Patching image repositories without network..."
+    CONTAINER_ID=$(sudo podman create "${target_image}:${tag}")
+    mkdir -p ./tmp_repos
+    sudo podman cp "${CONTAINER_ID}:/etc/yum.repos.d" ./tmp_repos/ 2>/dev/null || true
+    
+    # Switch gpgcheck to 0 in the extracted files
+    sudo sed -i 's/gpgcheck=1/gpgcheck=0/g' ./tmp_repos/yum.repos.d/*.repo 2>/dev/null || true
+    
+    # Commit the changes back into a modified image
+    sudo podman cp ./tmp_repos/yum.repos.d "${CONTAINER_ID}:/etc/"
+    sudo podman commit "${CONTAINER_ID}" "${target_image}:${tag}"
+    sudo podman rm "${CONTAINER_ID}"
+    sudo rm -rf ./tmp_repos
+
     args="--type ${type} "
-    args+="--use-librepo=True "
+    args+="--use-librepo=False "
     args+="--rootfs=btrfs"
 
     BUILDTMP=$(mktemp -p "${PWD}" -d -t _build-bib.XXXXXXXXXX)
