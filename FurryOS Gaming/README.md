@@ -1,306 +1,328 @@
-# image-template
+# 🐾 FurryOS: The Immutable Gaming Experience
 
-This repository is meant to be a template for building your own custom [bootc](https://github.com/bootc-dev/bootc) image. This template is the recommended way to make customizations to any image published by the Universal Blue Project.
+Welcome to the official repository for **FurryOS**, a next-generation, container-native operating system designed specifically for gamers, power users, and creators. 
 
-# Community
+Built on the rock-solid, immutable foundation of **Fedora 44** and heavily leveraging the architecture of **Bazzite (`bazzite-nvidia:stable`)**, FurryOS takes desktop Linux to the next level. By managing the entire operating system as an OCI container image, updates are atomic, rollbacks are instant, and your core system is virtually unbreakable.
 
-If you have questions about this template after following the instructions, try the following spaces:
-- [Universal Blue Forums](https://universal-blue.discourse.group/)
-- [Universal Blue Discord](https://discord.gg/WEu6BdFEtp)
-- [bootc discussion forums](https://github.com/bootc-dev/bootc/discussions) - This is not an Universal Blue managed space, but is an excellent resource if you run into issues with building bootc images.
+This document serves as the complete master guide: from understanding the architecture and features, to setting up your build environment, compiling the ISO yourself, and troubleshooting common Git and OSBuild pipeline errors.
 
-# How to Use
+---
 
-To get started on your first bootc image, simply read and follow the steps in the next few headings.
-If you prefer instructions in video form, TesterTech created an excellent tutorial, embedded below.
+## 📑 Table of Contents
 
-[![Video Tutorial](https://img.youtube.com/vi/IxBl11Zmq5w/0.jpg)](https://www.youtube.com/watch?v=IxBl11Zmq5wE)
+1. [Core Features & Philosophy](#-core-features--philosophy)
+2. [System Requirements](#-system-requirements)
+3. [Project Architecture & Directory Map](#-project-architecture--directory-map)
+4. [Deep Dive: Configuration Files](#-deep-dive-configuration-files)
+5. [How to Build FurryOS from Scratch](#-how-to-build-furryos-from-scratch)
+6. [Flashing & Installation](#-flashing--installation)
+7. [Post-Installation Setup](#-post-installation-setup)
+8. [Troubleshooting & Git Conflicts](#-troubleshooting--git-conflicts)
+9. [Development & Contributing](#-development--contributing)
+10. [Frequently Asked Questions (FAQ)](#-frequently-asked-questions-faq)
+11. [License & Acknowledgements](#-license--acknowledgements)
 
-## Step 0: Prerequisites
+---
 
-These steps assume you have the following:
-- A Github Account
-- A machine running a bootc image (e.g. Bazzite, Bluefin, Aurora, or Fedora Atomic)
-- Experience installing and using CLI programs
+## 🌟 Core Features & Philosophy
 
-## Step 1: Preparing the Template
+FurryOS is not just another Linux distribution; it is an **image-based, atomic OS**. 
 
-### Step 1a: Copying the Template
+### 🛡️ Immutable Core
+The root filesystem is read-only. Applications are installed via Flatpak, Distrobox, or inside user-space containers. This prevents software rot, accidental system bricking, and ensures that every boot is exactly as intended.
 
-Select `Use this Template` on this page. You can set the name and description of your repository to whatever you would like, but all other settings should be left untouched.
+### 🎮 Gaming First
+FurryOS is tuned for maximum framerates and minimum latency:
+* **NVIDIA Native:** Built directly from the `bazzite-nvidia` upstream, meaning proprietary NVIDIA drivers are baked into the kernel image. No post-install driver hunting required.
+* **Kernel Tuning:** Custom `sysctl.d` and `limits.d` configurations prioritize game processes and reduce input lag.
+* **GameMode & MangoHud:** Feral Interactive's GameMode is pre-configured (`gamemode.ini`), and MangoHud is available out-of-the-box for performance telemetry.
+* **Proton & Wine:** Pre-loaded with Proton-GE, protontricks, and winetricks for seamless Windows game compatibility.
 
-Once you have finished copying the template, you need to enable the Github Actions workflows for your new repository.
-To enable the workflows, go to the `Actions` tab of the new repository and click the button to enable workflows.
+### 🎨 Beautiful Desktop
+* **KDE Plasma:** Powered by the highly customizable KDE Plasma desktop environment.
+* **SteamOS Theme:** Includes the `steamos-kde` SDDM login theme for a console-like experience.
+* **Custom Assets:** Unique default wallpapers (`default.png`) and configurations loaded directly into `/etc/skel/`.
 
-### Step 1b: Cloning the New Repository
+---
 
-Here I will defer to the much superior GitHub documentation on the matter. You can use whichever method is easiest.
-[GitHub Documentation](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository)
+## 💻 System Requirements
 
-Once you have the repository on your local drive, proceed to the next step.
+### To Run FurryOS (Target Hardware)
+* **CPU:** 64-bit AMD or Intel processor (Quad-core or better recommended).
+* **GPU:** NVIDIA GTX 10-series or newer (due to the `bazzite-nvidia` base).
+* **RAM:** 8GB Minimum (16GB+ highly recommended for modern gaming).
+* **Storage:** 64GB Minimum SSD/NVMe (BTRFS filesystem used by default).
+* **Motherboard:** UEFI with Secure Boot (can be enrolled via MokManager).
 
-## Step 2: Initial Setup
+### To Build FurryOS (Host Machine)
+* **OS:** Windows 11 with WSL2 (Ubuntu/Debian) OR a native Linux environment.
+* **Memory:** At least 8GB of RAM allocated to WSL/Linux.
+* **Disk Space:** 40GB+ of free space for container caching and ISO output.
+* **Tools Required:** `podman`, `git`, `just`, `rsync`, and `osbuild`.
 
-### Step 2a: Creating a Cosign Key
+---
 
-Container signing is important for end-user security and is enabled on all Universal Blue images. By default the image builds *will fail* if you don't.
+## 🗺️ Project Architecture & Directory Map
 
-First, install the [cosign CLI tool](https://edu.chainguard.dev/open-source/sigstore/cosign/how-to-install-cosign/#installing-cosign-with-the-cosign-binary)
-With the cosign tool installed, run inside your repo folder:
+FurryOS is structured like a software project rather than a traditional OS ISO. Here is the exact layout of the repository and what every component does:
+
+```text
+FurryOS/
+├── .github/                       # CI/CD Pipeline Automation
+│   └── workflows/                 
+│       ├── build-disk.yml         # GitHub Action to compile the disk image remotely
+│       ├── build.yml              # GitHub Action for standard container builds
+│       └── dependabot.yml         # Automated dependency updates
+├── renovate.json5                 # Renovate bot config for keeping upstream packages fresh
+├── build_files/
+│   └── build.sh                   # THE ENGINE: The main bash script executed inside the container
+├── disk_config/                   # bootc-image-builder configurations
+│   ├── disk.toml                  # Base disk layout and partitioning rules
+│   ├── iso-kde.toml               # KDE-specific ISO deployment settings
+│   └── iso.toml                   # Generic ISO deployment settings
+├── system_files/                  # Files copied directly into the OS root filesystem
+│   ├── etc/
+│   │   ├── security/limits.d/
+│   │   │   └── 99-furryos-gaming.conf # Unlocks memory/process limits for games
+│   │   ├── skel/.config/          # Default settings applied to all NEW users
+│   │   │   ├── kde.org/session    # KDE session initialization
+│   │   │   ├── kdeglobals         # KDE global color/theme settings
+│   │   │   └── plasmarc           # Plasma panel/widget layout defaults
+│   │   ├── sysctl.d/
+│   │   │   └── 99-furryos-gaming.conf # Kernel tweaks for network and CPU scheduling
+│   │   ├── .gitkeep
+│   │   └── gamemode.ini           # System-wide Feral GameMode config
+│   └── usr/
+│       ├── share/
+│       │   └── backgrounds/
+│       │       └── furryos/
+│       │           └── default.png # The flagship desktop wallpaper
+│       ├── .gitkeep
+│       └── FURRYOS_CONFIG.md      # On-system documentation reference
+├── .gitignore                     # Prevents output/ and temp files from being committed
+├── artifacthub-repo.yml           # Metadata for container registry indexing
+├── Containerfile                  # The blueprint that pulls Bazzite and applies build_files/
+├── cosign.pub                     # Cryptographic public key for verifying image signatures
+├── FurryOS.code-workspace         # VS Code workspace configuration file
+├── image-template.env             # Environment variables for the image builder
+├── IMPLEMENTATION_C...            # Project planning and implementation notes
+└── Justfile                       # Command automation recipes (the `just` command)
+```
+
+# 🔍 Deep Dive: Configuration Files
+
+To understand how FurryOS shapes its environment, you need to look at the custom injected configurations.
+
+### 1. `system_files/etc/sysctl.d/99-furryos-gaming.conf`
+This file applies kernel-level parameters the moment the OS boots. It adjusts the virtual memory swappiness (preventing stuttering when RAM fills up) and tweaks the network stack for lower ping in multiplayer games.
+
+### 2. `disk_config/iso-kde.toml`
+When `bootc-image-builder` generates the ISO, it reads this file to understand how to format the user's hard drive. FurryOS defaults to a BTRFS layout. This allows for transparent filesystem compression (saving space on massive game installs) and instant filesystem snapshots.
+
+### 3. `Containerfile`
+This is the heart of the project. It starts with `FROM ghcr.io/ublue-os/bazzite-nvidia:stable`, copies the `system_files` folder into the root `/` directory, and then executes `build_files/build.sh` to install extra packages (like `htop`, `tmux`, `neovim`) and force kernel updates.
+
+---
+
+## 🔨 How to Build FurryOS from Scratch
+
+Want to compile your own custom version of the OS? Follow these steps exactly.
+
+### Step 1: Prepare the Host Environment
+Ensure you are running inside a Linux environment (or WSL2 on Windows). Install the necessary dependencies:
 
 ```bash
-COSIGN_PASSWORD="" cosign generate-key-pair
+# For Ubuntu/Debian based hosts
+sudo apt update
+sudo apt install podman git rsync curl
+
 ```
 
-The signing key will be used in GitHub Actions and will not work if it is password protected.
-
-> [!WARNING]
-> Be careful to *never* accidentally commit `cosign.key` into your git repo. If this key goes out to the public, the security of your repository is compromised.
-
-Next, you need to add the key to GitHub. This makes use of GitHub's secret signing system.
-
-<details>
-    <summary>Using the Github Web Interface (preferred)</summary>
-
-Go to your repository settings, under `Secrets and Variables` -> `Actions`
-![image](https://user-images.githubusercontent.com/1264109/216735595-0ecf1b66-b9ee-439e-87d7-c8cc43c2110a.png)
-Add a new secret and name it `SIGNING_SECRET`, then paste the contents of `cosign.key` into the secret and save it. Make sure it's the .key file and not the .pub file. Once done, it should look like this:
-![image](https://user-images.githubusercontent.com/1264109/216735690-2d19271f-cee2-45ac-a039-23e6a4c16b34.png)
-</details>
-<details>
-<summary>Using the Github CLI</summary>
-
-If you have the `github-cli` installed, run:
+Install `just` (the command runner):
 
 ```bash
-gh secret set SIGNING_SECRET < cosign.key
+curl --proto '=https' --tlsv1.2 -sSf [https://just.systems/install.sh](https://just.systems/install.sh) | bash -s -- --to ~/bin
+export PATH="$PATH:$HOME/bin"
+
 ```
-</details>
 
-### Step 2b: Choosing Your Base Image
-
-To choose a base image, simply modify the line in the container file starting with `FROM`. This will be the image your image derives from, and is your starting point for modifications.
-For a base image, you can choose any of the Universal Blue images or start from a Fedora Atomic system. Below this paragraph is a dropdown with a non-exhaustive list of potential base images.
-
-<details>
-    <summary>Base Images</summary>
-
-- Bazzite: `ghcr.io/ublue-os/bazzite:stable`
-- Aurora: `ghcr.io/ublue-os/aurora:stable`
-- Bluefin: `ghcr.io/ublue-os/bluefin:stable`
-- Universal Blue Base: `ghcr.io/ublue-os/base-main:latest`
-- Fedora: `quay.io/fedora/fedora-bootc:44`
-
-You can find more Universal Blue images on the [packages page](https://github.com/orgs/ublue-os/packages).
-</details>
-
-If you don't know which image to pick, choosing the one your system is currently on is the best bet for a smooth transition. To find out what image your system currently uses, run the following command:
-```bash
-sudo bootc status
-```
-This will show you all the info you need to know about your current image. The image you are currently on is displayed after `Booted image:`. Paste that information after the `FROM` statement in the Containerfile to set it as your base image.
-
-### Step 2c: Changing Names
-
-Change the `IMAGE_NAME` and `REPO_ORGANIZATION` variable inside the `image-template.env`
-
-To commit and push all the files changed and added in step 2 into your Github repository:
-```bash
-git add Containerfile image-template.env cosign.pub
-git commit -m "Initial Setup"
-git push
-```
-Once pushed, go look at the Actions tab on your Github repository's page.  The green checkmark should be showing on the top commit, which means your new image is ready!
-
-## Step 3: Switch to Your Image
-
-From your bootc system, run the following command substituting in your Github username and image name where noted.
-```bash
-sudo bootc switch ghcr.io/<username>/<image_name>
-```
-This should queue your image for the next reboot, which you can do immediately after the command finishes. You have officially set up your custom image! See the following section for an explanation of the important parts of the template for customization.
-
-# Repository Contents
-
-## Containerfile
-
-The [Containerfile](./Containerfile) defines the operations used to customize the selected image.This file is the entrypoint for your image build, and works exactly like a regular podman Containerfile. For reference, please see the [Podman Documentation](https://docs.podman.io/en/latest/Introduction.html).
-
-## build.sh
-
-The [build.sh](./build_files/build.sh) file is called from your Containerfile. It is the best place to install new packages or make any other customization to your system. There are customization examples contained within it for your perusal.
-
-## build.yml
-
-The [build.yml](./.github/workflows/build.yml) Github Actions workflow creates your custom OCI image and publishes it to the Github Container Registry (GHCR). By default, the image name will match the Github repository name.
-
-# Building Disk Images
-
-This template provides an out of the box workflow for creating disk images (ISO, qcow, raw) for your custom OCI image which can be used to directly install onto your machines.
-
-This template provides a way to upload the disk images that is generated from the workflow to a S3 bucket. The disk images will also be available as an artifact from the job, if you wish to use an alternate provider. To upload to S3 we use [rclone](https://rclone.org/) which is able to use [many S3 providers](https://rclone.org/s3/).
-
-## Setting Up ISO Builds
-
-The [build-disk.yml](./.github/workflows/build-disk.yml) Github Actions workflow creates a disk image from your OCI image by utilizing the [bootc-image-builder](https://osbuild.org/docs/bootc/). In order to use this workflow you must complete the following steps:
-
-1. Modify `disk_config/iso.toml` to point to your custom container image before generating an ISO image.
-2. If you changed your image name from the default in `build.yml` then in the `build-disk.yml` file edit the `IMAGE_REGISTRY`, `IMAGE_NAME` and `DEFAULT_TAG` environment variables with the correct values. If you did not make changes, skip this step.
-3. Finally, if you want to upload your disk images to S3 then you will need to add your S3 configuration to the repository's Action secrets. This can be found by going to your repository settings, under `Secrets and Variables` -> `Actions`. You will need to add the following
-  - `S3_PROVIDER` - Must match one of the values from the [supported list](https://rclone.org/s3/)
-  - `S3_BUCKET_NAME` - Your unique bucket name
-  - `S3_ACCESS_KEY_ID` - It is recommended that you make a separate key just for this workflow
-  - `S3_SECRET_ACCESS_KEY` - See above.
-  - `S3_REGION` - The region your bucket lives in. If you do not know then set this value to `auto`.
-  - `S3_ENDPOINT` - This value will be specific to the bucket as well.
-
-Once the workflow is done, you'll find the disk images either in your S3 bucket or as part of the summary under `Artifacts` after the workflow is completed.
-
-# Artifacthub
-
-This template comes with the necessary tooling to index your image on [artifacthub.io](https://artifacthub.io). Use the `artifacthub-repo.yml` file at the root to verify yourself as the publisher. This is important to you for a few reasons:
-
-- The value of artifacthub is it's one place for people to index their custom images, and since we depend on each other to learn, it helps grow the community. 
-- You get to see your pet project listed with the other cool projects in Cloud Native.
-- Since the site puts your README front and center, it's a good way to learn how to write a good README, learn some marketing, finding your audience, etc. 
-
-[Discussion Thread](https://universal-blue.discourse.group/t/listing-your-custom-image-on-artifacthub/6446)
-
-# Justfile Documentation
-
-The `Justfile` contains various commands and configurations for building and managing container images and virtual machine images using Podman and other utilities.
-To use it, you must have installed [just](https://just.systems/man/en/introduction.html) from your package manager or manually. It is available by default on all Universal Blue images.
-
-## Environment Variables
-
-These are all sourced from the `image-template.env` file.
-
-- `image_name`: The name of the image (default: "image-template").
-- `default_tag`: The default tag for the image (default: "latest").
-- `bib_image`: The Bootc Image Builder (BIB) image (default: "quay.io/centos-bootc/bootc-image-builder:latest").
-
-## Building The Image
-
-All these recipes will work (with default values) without supplying any arguments to them, e.g. `just build`
-
-### `just build`
-
-Builds a container image using Podman.
+### Step 2: Clone the Repository
 
 ```bash
-just build $target_image $tag
+git clone [https://github.com/YourUsername/FurryOS.git](https://github.com/YourUsername/FurryOS.git)
+cd FurryOS
+
 ```
 
-Arguments:
-- `$target_image`: The tag you want to apply to the image (default: `$image_name`).
-- `$tag`: The tag for the image (default: `$default_tag`).
+### Step 3: Build the Container Image
 
-### Rechunking
-We can flatten the layers of container images to make sure there isn't a single huge layer when your image gets published.
-This does not make your image faster to download, just provides better resumability.
-
-#### `just ostree-rechunk`
-Rechunks the existing Image with [rpm-ostree](https://coreos.github.io/rpm-ostree/build-chunked-oci/)
+Before making an ISO, you must build the OS as a local container image. This downloads the upstream Bazzite image, applies your custom files, and runs the `build.sh` script.
 
 ```bash
-just ostree-rechunk $target_image $tag
+podman build --no-cache -t localhost/furryos:latest .
+
 ```
 
-#### `just rechunk`
-Rechunks the existing Image with [chunkah](https://github.com/coreos/chunkah), this is probably gonna be the default here at some point, try it out, it's cool.
+> ☕ **Note:** This process downloads several gigabytes of data. Grab a coffee.
+
+### Step 4: Compile the ISO
+
+Once the container is built locally, use the `just` recipe to trigger the `bootc-image-builder` pipeline. This translates the container into a bootable `.iso` file.
 
 ```bash
-just rechunk $target_image $tag
-```
-
-### Switching to the locally built image for testing
-
-The image has to be in the containers-storage owned by root, to be able to rebase to it, see the `_rootful_load_image` recipe.
-
-`sudo just build` and `sudo just ostree-rechunk` builds directly as root and allows you to skip the transfer to the root containers-storage.
-
-You can rebase to all the images that are in your containers-storage:
+just build-iso
 
 ```
-sudo podman image list --filter=label=containers.bootc=1
-```
 
-See [man bootc switch](https://bootc.dev/bootc/man/bootc-switch.8.html) for more info.
+If successful, the final ISO will be deposited in the `output/` directory.
 
-```
-sudo bootc switch --transport containers-storage localhost/myimage:latest
-```
+### Step 5: Sync to Host (For WSL Users)
 
-and reboot your system!
-
-## Building and Running Virtual Machines and ISOs
-
-The below commands all build QCOW2 images. To produce or use a different type of image, substitute in the command with that type in the place of `qcow2`. The available types are `qcow2`, `iso`, and `raw`.
-
-### `just build-qcow2`
-
-Builds a QCOW2 virtual machine image.
+If you built this inside WSL2 and need to move the ISO to your Windows desktop, run this custom `rsync` command to bypass permission locks:
 
 ```bash
-just build-qcow2 $target_image $tag
+sudo rsync -av --no-perms --no-owner --no-group --chmod=777 --exclude='_build_*' ~/FurryOS/ "/mnt/c/Users/YourUsername/Desktop/FurryOS/"
+
 ```
 
-### `just rebuild-qcow2`
+---
 
-Rebuilds a QCOW2 virtual machine image.
+## 💿 Flashing & Installation
+
+Once you have your compiled `FurryOS.iso`, you need to put it on a USB drive.
+
+1. Download **Rufus** (Windows) or **BalenaEtcher** (Mac/Linux/Windows).
+2. Insert a USB drive (8GB or larger). **Warning: All data on the USB will be destroyed.**
+3. Select the `FurryOS.iso` file and flash it to the drive.
+4. Reboot your computer and enter your BIOS/UEFI settings (usually `F2`, `F12`, or `DEL`).
+5. Disable **Fast Boot**.
+6. Set the USB drive as the primary boot device.
+7. Save and exit. Follow the Anaconda installer prompts to install FurryOS to your hard drive.
+
+---
+
+## ⚙️ Post-Installation Setup
+
+Because FurryOS is immutable, you do not use `dnf` to install daily applications like Discord, Spotify, or Web Browsers.
+
+### Installing GUI Apps
+
+Use the pre-installed **Discover** software center to browse and install Flatpaks. Flatpaks run cleanly isolated from the system root.
+
+### Installing CLI Tools
+
+If you need developer tools (like Node.js, Python environments, or specific compilers), do not try to layer them onto the root system. Instead, use **Distrobox**:
 
 ```bash
-just rebuild-vm $target_image $tag
+# Create an Ubuntu-based container integrated with your home folder
+distrobox create -i ubuntu:latest -n dev-box
+distrobox enter dev-box
+
+# Now you can use 'apt install' safely!
+
 ```
 
-### `just run-vm-qcow2`
+---
 
-Runs a virtual machine from a QCOW2 image.
+## 🚨 Troubleshooting & Git Conflicts
+
+Development is messy. Here are solutions to the most common roadblocks you will hit while building FurryOS.
+
+### ❌ Issue 1: Git Merge Conflicts (`fatal: Exiting because of an unresolved conflict`)
+
+If you see the error in VS Code stating *"Git: fatal: Exiting because of an unresolved conflict,"* accompanied by a red `!M` next to your `Justfile` or `.github` workflows, it means Git tried to pull updates from a remote repository, but your local files have clashing edits.
+
+#### How to Fix It:
+
+1. **Open the Conflicted File:** Click on the `Justfile` (or any file with the red `!`) in the VS Code source control tab.
+2. **Locate the Conflict Markers:** Scroll through the file looking for strange symbols like this:
+```text
+build-iso:
+    sudo podman run --rm -it ...
+```
+
+3. **Resolve:** VS Code will give you clickable buttons above the conflict: *Accept Current Change*, *Accept Incoming Change*, or *Accept Both*. Click the one that has the correct code you want to keep.
+4. **Mark as Resolved:** Once the file is clean, save it. Then, open your terminal and tell Git you fixed it:
+```bash
+git add Justfile
+git commit -m "Resolved merge conflict in Justfile"
+
+```
+
+
+
+You can now continue your work!
+
+### ❌ Issue 2: Osbuild 404 Errors (Kernel Sync Failure)
+
+If `just build-iso` crashes around the 22% mark complaining that it cannot download `kernel-modules-core` with a `404 URL returned error`, your container kernel version is out of sync with the live Fedora mirrors.
+
+#### How to Fix It:
+
+Open `build_files/build.sh` and ensure this line is present so the container forces a kernel update before the ISO builder looks for the packages:
 
 ```bash
-just run-vm-qcow2 $target_image $tag
+dnf5 install -y kernel kernel-core kernel-modules kernel-modules-core
+
 ```
 
-### `just spawn-vm`
+Rebuild the container (`podman build --no-cache...`) and then run `just build-iso` again.
 
-Runs a virtual machine using systemd-vmspawn.
+### ❌ Issue 3: Permission Denied (Error 13) on Output
+
+Because `podman` and `osbuild` run as root, the ISO files generated in the `output/` folder will be locked to the root user, preventing you from moving or deleting them.
+
+#### How to Fix It:
+
+Take back ownership of the folder with:
 
 ```bash
-just spawn-vm rebuild="0" type="qcow2" ram="6G"
+sudo chown -R $USER:$USER ~/FurryOS/output/
+
 ```
 
-## File Management
+---
 
-### `just check`
+## 🛠️ Development & Contributing
 
-Checks the syntax of all `.just` files and the `Justfile`.
+We welcome pull requests! If you want to add a feature to FurryOS:
 
-### `just fix`
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/cool-new-tweak`).
+3. If adding a system-wide file, place it in the correct path under `system_files/`.
+4. If adding a package, add it to the `dnf5 install` list inside `build_files/build.sh`.
+5. Test your build locally using the steps in Section 5.
+6. Submit a Pull Request.
 
-Fixes the syntax of all `.just` files and the `Justfile`.
+> 📝 **Note on `.github/workflows/`:** Any changes pushed to the `main` branch will automatically trigger the GitHub Actions defined in `build.yml` and `build-disk.yml`. Ensure your code passes locally before pushing to save CI/CD minutes!
 
-### `just clean`
+---
 
-Cleans the repository by removing build artifacts.
+## ❓ Frequently Asked Questions (FAQ)
 
-### `just lint`
+* **Q: Can I use `rpm-ostree install` instead of `dnf`?**
+* **A:** FurryOS is based on standard OCI containers, not traditional `rpm-ostree`. Package additions should be done inside the `Containerfile` or `build.sh` during the build process, not on the live booted system.
 
-Runs shell check on all Bash scripts.
 
-### `just format`
+* **Q: Why does my screen flicker on boot?**
+* **A:** The NVIDIA drivers are initializing. This is normal behavior for `bazzite-nvidia` base images before SDDM loads.
 
-Runs shfmt on all Bash scripts.
 
-## Additional resources
+* **Q: Will this delete my Windows install?**
+* **A:** If you select "Erase Disk" during the Anaconda installer, YES. If you want to dual-boot, you must manually partition your drive inside the installer, ensuring you do not overwrite your Windows EFI or NTFS partitions.
 
-For additional driver support, ublue maintains a set of scripts and container images available at [ublue-akmod](https://github.com/ublue-os/akmods). These images include the necessary scripts to install multiple kernel drivers within the container (Nvidia, OpenRazer, Framework...). The documentation provides guidance on how to properly integrate these drivers into your container image.
 
-## Community Examples
+* **Q: Why is the build taking 30 minutes?**
+* **A:** Image building is highly IO-bound and CPU intensive. Compressing the squashfs filesystem for the ISO and downloading gigabytes of RPM packages takes time. Running on an NVMe SSD dramatically reduces this.
 
-These are images derived from this template (or similar enough to this template). Reference them when building your image!
 
-- [m2Giles' OS](https://github.com/m2giles/m2os)
-- [bOS](https://github.com/bsherman/bos)
-- [Homer](https://github.com/bketelsen/homer/)
-- [Amy OS](https://github.com/astrovm/amyos)
-- [VeneOS](https://github.com/Venefilyn/veneos)
+
+---
+
+## 📜 License & Acknowledgements
+
+* **Base System:** Built upon the incredible work of the Ublue-OS Project and Bazzite.
+* **OS Framework:** Utilizes Fedora Linux and `bootc`.
+* **License:** This project is open-source. (Insert specific license like MIT or GPLv3 here).
+
+*Happy Gaming! Stay fast, stay immutable.* 🐾
