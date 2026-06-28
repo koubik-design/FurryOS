@@ -1,22 +1,35 @@
 #!/bin/bash
-
 set -ouex pipefail
 
 # Copy the contents of system_files/ of the git repo to /
 cp -avf "/ctx/system_files"/. /
 
-### Install packages
+# 1. Clear DNF5 cache and override broken live mirrors with global archive mirrors
+dnf5 clean all
 
-# 1. Base Utilities
-dnf5 install -y tmux neovim htop
+if [ -d /etc/yum.repos.d ]; then
+    # Force the updates repository to look at the permanent Fedora Project archive instead of a regional mirror
+    sed -i 's|^metalink=.*|baseurl=https://fedoraproject-updates-archive.fedoraproject.org/fedora/44/x86_64/|g' /etc/yum.repos.d/fedora-updates.repo || true
+    sed -i 's|^#baseurl=.*|baseurl=https://fedoraproject-updates-archive.fedoraproject.org/fedora/44/x86_64/|g' /etc/yum.repos.d/fedora-updates.repo || true
+fi
 
-# 2. Enable RPM Fusion repos (free + nonfree)
+dnf5 clean all
+
+# 2. Install kernel stack and system utilities from the fixed mirror location
+dnf5 install -y \
+    kernel \
+    kernel-core \
+    kernel-modules \
+    kernel-modules-core \
+    htop \
+    tmux \
+    neovim
+
+# 3. Enable RPM Fusion repos (free + nonfree)
 dnf5 install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
                 https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm || true
 
-# 3. Core Gaming & Performance Tools
-# Removed 'gamemode-daemon', 'pipewire-pulseaudio-free', and missing steam elements.
-# Added --skip-unavailable safely across the whole block.
+# 4. Core Gaming & Performance Tools
 dnf5 install -y --skip-unavailable \
     steam \
     steam-devices \
@@ -31,16 +44,10 @@ dnf5 install -y --skip-unavailable \
     glxinfo \
     mesa-demos
 
-# 4. Optional Emulators (via DNF if available, safely skipped if missing)
+# 5. Optional Emulators
 dnf5 install -y --skip-unavailable retroarch dolphin-emu || true
 
 #### System Unit Enablement
-
-# Enable container socket
-systemctl enable podman.socket
-
-# Enable GameMode daemon for performance optimization
-# systemctl enable gamemoded.service
 
 # Enable container socket
 systemctl enable podman.socket
