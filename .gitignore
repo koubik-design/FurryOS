@@ -1,7 +1,0 @@
-cosign.key
-_build_*
-output
-_build-*/**
-python3
-
-
